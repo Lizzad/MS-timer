@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>SOS Timer - Auditoría</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111827;
+      color: white;
+      padding: 8px;
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    h1 { color: #34d399; font-size: 1.1rem; }
+    .clock { 
+      color: #fde047; 
+      font-size: 1.2rem; 
+      font-weight: 700;
+      font-family: monospace;
+    }
+    .autosave-indicator {
+      color: #22c55e;
+      font-size: 0.65rem;
+      display: block;
+    }
+    .autosave-indicator.saving { color: #facc15; }
+    .controls { display: flex; gap: 5px; flex-wrap: wrap; }
+    .controls input {
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: white;
+      padding: 8px;
+      border-radius: 6px;
+      width: 100px;
+      font-size: 13px;
+    }
+    .controls button {
+      padding: 8px 10px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .btn-save { background: #16a34a; color: white; }
+    .btn-clear { background: #dc2626; color: white; }
+    .btn-undo { background: #f59e0b; color: black; }
+    
+    .backup-controls {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-backup { background: #0891b2; color: white; padding: 5px 8px; border: none; border-radius: 6px; font-size: 10px; cursor: pointer; }
+    .btn-restore { background: #7c3aed; color: white; padding: 5px 8px; border: none; border-radius: 6px; font-size: 10px; cursor: pointer; }
+    #fileInput { display: none; }
+    
+    .table-container {
+      overflow-x: auto;
+      background: #1f2937;
+      border-radius: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    th {
+      background: #374151;
+      padding: 6px 2px;
+      text-align: center;
+      font-weight: 600;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    td { padding: 4px 2px; text-align: center; border-top: 1px solid #374151; }
+    .client-name { 
+      text-align: left; 
+      padding-left: 5px; 
+      font-weight: 600;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .my-row { background: rgba(52, 211, 153, 0.15); }
+    .my-row .client-name { color: #34d399; }
+    
+    /* Estados visuales */
+    .status-waiting { border-left: 3px solid #fde047; }
+    .status-serving { border-left: 3px solid #f97316; }
+    .status-product { border-left: 3px solid #ec4899; }
+    .status-done { border-left: 3px solid #22c55e; }
+    
+    /* Botones de tiempo más grandes */
+    .time-btn {
+      width: 100%;
+      min-width: 44px;
+      padding: 12px 2px;
+      border: none;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .time-btn.empty { background: #374151; color: #9ca3af; }
+    .time-btn.empty:hover { background: #4b5563; }
+    .time-btn.t1 { background: #2563eb; color: white; }
+    .time-btn.t2 { background: #7c3aed; color: white; }
+    .time-btn.t3 { background: #db2777; color: white; }
+    .time-btn.t4 { background: #16a34a; color: white; }
+    
+    .duration { font-family: monospace; font-weight: 500; }
+    .queue-col { background: rgba(234, 179, 8, 0.15); color: #fde047; }
+    .pos-col { background: rgba(249, 115, 22, 0.15); color: #fdba74; }
+    .product-col { background: rgba(219, 39, 119, 0.15); color: #f9a8d4; }
+    .total-col { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; font-weight: 700; }
+    .decimal-col { background: rgba(52, 211, 153, 0.3); color: #a7f3d0; }
+    
+    .duration-btn {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-family: monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 10px 3px;
+      cursor: pointer;
+      width: 100%;
+      border-radius: 4px;
+    }
+    .duration-btn:active { background: rgba(255,255,255,0.2); }
+    
+    .clear-btn {
+      background: #7f1d1d;
+      border: none;
+      color: #fca5a5;
+      cursor: pointer;
+      padding: 6px 8px;
+      font-size: 10px;
+      border-radius: 4px;
+    }
+    
+    /* Popup de corrección mejorado */
+    .popup-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      z-index: 999;
+    }
+    .popup-overlay.visible { display: block; }
+    
+    .correction-popup {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1f2937;
+      border: 2px solid #374151;
+      border-radius: 16px;
+      padding: 20px;
+      z-index: 1000;
+      width: 90%;
+      max-width: 320px;
+    }
+    .correction-popup.visible { display: block; }
+    .correction-popup h4 {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .correction-popup .client-label { color: #34d399; font-weight: 700; }
+    .correction-popup .type-label { color: #fde047; }
+    
+    .correction-section {
+      margin-bottom: 15px;
+    }
+    .correction-section-title {
+      color: #6b7280;
+      font-size: 0.7rem;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .correction-btns {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .correction-btn {
+      background: #374151;
+      color: #22c55e;
+      border: none;
+      padding: 15px 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      flex: 1;
+    }
+    .correction-btn:active { background: #22c55e; color: white; }
+    .correction-btn.subtract { color: #f87171; }
+    .correction-btn.subtract:active { background: #ef4444; color: white; }
+    
+    .correction-close {
+      display: block;
+      margin-top: 15px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      width: 100%;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .summary {
+      margin-top: 12px;
+      background: #1f2937;
+      border-radius: 10px;
+      padding: 12px;
+      display: none;
+    }
+    .summary.visible { display: block; }
+    .summary h2 { color: #34d399; font-size: 0.85rem; margin-bottom: 8px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stat-box {
+      background: #374151;
+      border-radius: 8px;
+      padding: 10px 6px;
+      text-align: center;
+    }
+    .stat-label { color: #9ca3af; font-size: 0.6rem; margin-bottom: 3px; }
+    .stat-value { font-size: 1.1rem; font-weight: 700; }
+    .stat-value.white { color: white; }
+    .stat-value.purple { color: #a78bfa; }
+    .stat-value.green { color: #34d399; }
+    
+    .history-section {
+      margin-top: 15px;
+      background: #1f2937;
+      border-radius: 10px;
+      padding: 12px;
+      display: none;
+    }
+    .history-section.visible { display: block; }
+    .history-section h2 { 
+      color: #a78bfa; 
+      font-size: 0.85rem; 
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-item {
+      background: #374151;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .history-name { color: #34d399; font-weight: 600; font-size: 0.85rem; }
+    .history-date { color: #9ca3af; font-size: 0.65rem; }
+    .history-stats {
+      display: flex;
+      gap: 12px;
+      font-size: 0.7rem;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .history-stats span { color: #d1d5db; }
+    .history-stats strong { color: #fde047; }
+    
+    .history-times {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      font-size: 0.6rem;
+      padding-top: 6px;
+      border-top: 1px solid #4b5563;
+    }
+    .history-time-item {
+      background: #1f2937;
+      padding: 3px 5px;
+      border-radius: 4px;
+    }
+    .history-time-item.my-time {
+      background: rgba(52, 211, 153, 0.2);
+    }
+    .history-time-item .time-label { color: #9ca3af; margin-right: 2px; }
+    .history-time-item .time-value { color: #fde047; font-family: monospace; font-weight: 600; }
+    
+    .delete-history { background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 12px; padding: 2px 6px; }
+    .btn-clear-history { background: #7f1d1d; color: #fca5a5; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.65rem; cursor: pointer; }
+    .btn-export-all { background: #1e40af; color: #93c5fd; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.65rem; cursor: pointer; margin-right: 5px; }
+    .view-hint { color: #60a5fa; font-size: 0.6rem; margin-top: 4px; }
+    
+    /* Leyenda de estados */
+    .legend {
+      display: flex;
+      gap: 10px;
+      font-size: 0.6rem;
+      color: #9ca3af;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+    .legend-color.waiting { background: #fde047; }
+    .legend-color.serving { background: #f97316; }
+    .legend-color.product { background: #ec4899; }
+    .legend-color.done { background: #22c55e; }
+    
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; padding: 10px; overflow-y: auto; }
+    .modal.visible { display: block; }
+    .modal-content { background: #1f2937; border-radius: 12px; padding: 12px; max-width: 100%; margin: 0 auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #374151; }
+    .modal-title { color: #34d399; font-size: 1rem; font-weight: 700; }
+    .modal-date { color: #9ca3af; font-size: 0.7rem; }
+    .modal-close { background: #dc2626; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; }
+    .modal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+    .modal-stat { background: #374151; border-radius: 8px; padding: 8px; text-align: center; }
+    .modal-stat-label { color: #9ca3af; font-size: 0.6rem; margin-bottom: 2px; }
+    .modal-stat-value { font-size: 0.95rem; font-weight: 700; color: #34d399; }
+    
+    .modal-times-summary { background: #374151; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .modal-times-summary h3 { color: #a78bfa; font-size: 0.75rem; margin-bottom: 8px; }
+    .modal-times-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .modal-time-box { background: #1f2937; border-radius: 6px; padding: 6px; text-align: center; }
+    .modal-time-box.my-time { background: rgba(52, 211, 153, 0.15); border: 1px solid #34d399; }
+    .modal-time-box .label { color: #9ca3af; font-size: 0.55rem; margin-bottom: 2px; }
+    .modal-time-box.my-time .label { color: #34d399; }
+    .modal-time-box .value { color: #fde047; font-family: monospace; font-size: 0.8rem; font-weight: 700; }
+    
+    .modal-table { overflow-x: auto; }
+    .modal-table table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    .modal-table th { background: #374151; padding: 6px 3px; text-align: center; }
+    .modal-table td { padding: 5px 3px; text-align: center; border-top: 1px solid #374151; font-family: monospace; }
+    
+    .instructions { margin-top: 10px; color: #6b7280; font-size: 0.6rem; line-height: 1.4; }
+    .toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: #16a34a; color: white; padding: 10px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 500; opacity: 0; transition: opacity 0.3s; z-index: 1001; }
+    .toast.show { opacity: 1; }
+    
+    @media (max-width: 380px) {
+      .time-btn { padding: 10px 1px; font-size: 9px; min-width: 38px; }
+      table { font-size: 9px; }
+      .client-name { font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>SOS Auditoría</h1>
+      <span class="autosave-indicator" id="autosaveIndicator">● Guardado</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="controls">
+      <input type="text" id="location" placeholder="Tienda">
+      <button class="btn-undo" onclick="undoLast()">↩</button>
+      <button class="btn-save" onclick="saveStore()">💾</button>
+      <button class="btn-clear" onclick="clearAll()">🗑</button>
+    </div>
+  </div>
+
+  <div class="backup-controls">
+    <button class="btn-backup" onclick="downloadBackup()">📥 Backup</button>
+    <button class="btn-restore" onclick="document.getElementById('fileInput').click()">📤 Cargar</button>
+    <input type="file" id="fileInput" accept=".json" onchange="loadBackup(event)">
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color waiting"></div> Cola</div>
+    <div class="legend-item"><div class="legend-color serving"></div> Atendiendo</div>
+    <div class="legend-item"><div class="legend-color product"></div> Producto</div>
+    <div class="legend-item"><div class="legend-color done"></div> Listo</div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th style="color:#93c5fd">T1</th>
+          <th style="color:#c4b5fd">T2</th>
+          <th style="color:#f9a8d4">T3</th>
+          <th style="color:#86efac">T4</th>
+          <th class="queue-col">Q</th>
+          <th class="pos-col">POS</th>
+          <th class="product-col">Pr</th>
+          <th class="total-col">Tot</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="summary" id="summary">
+    <h2>Resumen</h2>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Clientes</div>
+        <div class="stat-value white" id="statCount">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Promedio</div>
+        <div class="stat-value green" id="statAvgTime">--:--</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Prom (dec)</div>
+        <div class="stat-value purple" id="statAvgDec">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="history-section" id="historySection">
+    <h2>
+      Historial
+      <div>
+        <button class="btn-export-all" onclick="exportAll()">📥 CSV</button>
+        <button class="btn-clear-history" onclick="clearHistory()">Borrar</button>
+      </div>
+    </h2>
+    <div id="historyList"></div>
+    <p class="view-hint">👆 Toca para ver detalle</p>
+  </div>
+
+  <div class="instructions">
+    Toca T1-T4 para marcar | Toca Q/POS/Pr para corregir ±seg | ↩ Deshacer
+  </div>
+
+  <!-- Popup de corrección -->
+  <div class="popup-overlay" id="popupOverlay" onclick="closePopup()"></div>
+  <div class="correction-popup" id="correctionPopup">
+    <h4><span class="client-label" id="popupClient">Cliente</span> → <span class="type-label" id="popupType">Queue</span></h4>
+    
+    <div class="correction-section">
+      <div class="correction-section-title">SUMAR</div>
+      <div class="correction-btns">
+        <button class="correction-btn" onclick="applyCorrection(10)">+10s</button>
+        <button class="correction-btn" onclick="applyCorrection(20)">+20s</button>
+        <button class="correction-btn" onclick="applyCorrection(30)">+30s</button>
+      </div>
+    </div>
+    
+    <div class="correction-section">
+      <div class="correction-section-title">RESTAR</div>
+      <div class="correction-btns">
+        <button class="correction-btn subtract" onclick="applyCorrection(-10)">-10s</button>
+        <button class="correction-btn subtract" onclick="applyCorrection(-20)">-20s</button>
+        <button class="correction-btn subtract" onclick="applyCorrection(-30)">-30s</button>
+      </div>
+    </div>
+    
+    <button class="correction-close" onclick="closePopup()">Cancelar</button>
+  </div>
+
+  <!-- Modal de detalle -->
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modalTitle">Tienda</div>
+          <div class="modal-date" id="modalDate">Fecha</div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">Cerrar</button>
+      </div>
+      <div class="modal-stats">
+        <div class="modal-stat">
+          <div class="modal-stat-label">Clientes</div>
+          <div class="modal-stat-value" id="modalClients">0</div>
+        </div>
+        <div class="modal-stat">
+          <div class="modal-stat-label">Promedio</div>
+          <div class="modal-stat-value" id="modalAvg">--:--</div>
+        </div>
+        <div class="modal-stat">
+          <div class="modal-stat-label">Prom (dec)</div>
+          <div class="modal-stat-value" id="modalDec">--</div>
+        </div>
+      </div>
+      <div class="modal-times-summary">
+        <h3>⏱️ Tiempos</h3>
+        <div class="modal-times-grid" id="modalTimesGrid"></div>
+      </div>
+      <div class="modal-table">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>T1</th>
+              <th>T2</th>
+              <th>T3</th>
+              <th>T4</th>
+              <th class="queue-col">Q</th>
+              <th class="pos-col">POS</th>
+              <th class="product-col">Pr</th>
+              <th class="total-col">Tot</th>
+            </tr>
+          </thead>
+          <tbody id="modalTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">✓</div>
+
+  <script>
+    let clients = [
+      { id: 'Yo', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C1', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C2', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C3', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C4', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C5', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C6', t1: null, t2: null, t3: null, t4: null },
+      { id: 'C7', t1: null, t2: null, t3: null, t4: null },
+    ];
+    let history = [];
+    let undoStack = [];
+    let currentCorrection = { clientIndex: null, type: null };
+
+    function vibrate(ms = 30) {
+      if (navigator.vibrate) navigator.vibrate(ms);
+    }
+
+    function saveUndo() {
+      undoStack.push(JSON.stringify(clients));
+      if (undoStack.length > 20) undoStack.shift();
+    }
+
+    function undoLast() {
+      if (undoStack.length === 0) {
+        showToast('Nada que deshacer');
+        return;
+      }
+      clients = JSON.parse(undoStack.pop());
+      vibrate(50);
+      render();
+      saveToStorage();
+      showToast('↩ Deshecho');
+    }
+
+    function getStatus(c) {
+      if (c.t4) return 'done';
+      if (c.t3) return 'product';
+      if (c.t2) return 'serving';
+      if (c.t1) return 'waiting';
+      return '';
+    }
+
+    function openPopup(clientIndex, type) {
+      const client = clients[clientIndex];
+      if (!client.t1) {
+        showToast('Marca T1 primero');
+        return;
+      }
+      vibrate();
+      currentCorrection = { clientIndex, type };
+      document.getElementById('popupClient').textContent = client.id;
+      document.getElementById('popupType').textContent = type.toUpperCase();
+      document.getElementById('popupOverlay').classList.add('visible');
+      document.getElementById('correctionPopup').classList.add('visible');
+    }
+
+    function closePopup() {
+      document.getElementById('popupOverlay').classList.remove('visible');
+      document.getElementById('correctionPopup').classList.remove('visible');
+      currentCorrection = { clientIndex: null, type: null };
+    }
+
+    function applyCorrection(seconds) {
+      const { clientIndex, type } = currentCorrection;
+      if (clientIndex === null) return;
+      
+      saveUndo();
+      vibrate(40);
+      
+      const client = clients[clientIndex];
+      const msToAdd = seconds * 1000;
+
+      if (type === 'queue') {
+        if (client.t2) client.t2 = new Date(new Date(client.t2).getTime() + msToAdd).toISOString();
+        if (client.t3) client.t3 = new Date(new Date(client.t3).getTime() + msToAdd).toISOString();
+        if (client.t4) client.t4 = new Date(new Date(client.t4).getTime() + msToAdd).toISOString();
+      } else if (type === 'pos') {
+        if (client.t3) client.t3 = new Date(new Date(client.t3).getTime() + msToAdd).toISOString();
+        if (client.t4) client.t4 = new Date(new Date(client.t4).getTime() + msToAdd).toISOString();
+      } else if (type === 'prod') {
+        if (client.t4) client.t4 = new Date(new Date(client.t4).getTime() + msToAdd).toISOString();
+      }
+
+      closePopup();
+      render();
+      saveToStorage();
+      showToast(`${seconds > 0 ? '+' : ''}${seconds}s`);
+    }
+
+    function loadFromStorage() {
+      try {
+        const savedClients = localStorage.getItem('sosClients');
+        const savedHistory = localStorage.getItem('sosHistory');
+        const savedLocation = localStorage.getItem('sosLocation');
+        if (savedClients) clients = JSON.parse(savedClients);
+        if (savedHistory) history = JSON.parse(savedHistory);
+        if (savedLocation) document.getElementById('location').value = savedLocation;
+      } catch (e) { console.error('Error:', e); }
+    }
+
+    function saveToStorage() {
+      try {
+        const indicator = document.getElementById('autosaveIndicator');
+        indicator.textContent = '● Guardando...';
+        indicator.classList.add('saving');
+        localStorage.setItem('sosClients', JSON.stringify(clients));
+        localStorage.setItem('sosHistory', JSON.stringify(history));
+        localStorage.setItem('sosLocation', document.getElementById('location').value);
+        setTimeout(() => { indicator.textContent = '● Guardado'; indicator.classList.remove('saving'); }, 300);
+      } catch (e) { console.error('Error:', e); }
+    }
+
+    function downloadBackup() {
+      const backup = { version: '2.0', date: new Date().toISOString(), location: document.getElementById('location').value, clients, history };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `SOS_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      showToast('Backup ✓');
+    }
+
+    function loadBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const b = JSON.parse(e.target.result);
+          if (b.clients) clients = b.clients;
+          if (b.history) history = b.history;
+          if (b.location || b.currentLocation) document.getElementById('location').value = b.location || b.currentLocation;
+          saveToStorage(); render(); renderHistory();
+          showToast('Restaurado ✓');
+        } catch (err) { alert('Error: ' + err.message); }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function formatTime(date) {
+      if (!date) return '--:--';
+      return new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDuration(seconds) {
+      if (seconds === null || seconds < 0) return '--:--';
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function toDecimal(seconds) {
+      if (seconds === null || seconds < 0) return '--';
+      return (seconds / 60).toFixed(2);
+    }
+
+    function calcDuration(start, end) {
+      if (!start || !end) return null;
+      return Math.floor((new Date(end) - new Date(start)) / 1000);
+    }
+
+    function markTime(index, timeKey) {
+      saveUndo();
+      vibrate();
+      clients[index][timeKey] = new Date().toISOString();
+      render();
+      saveToStorage();
+    }
+
+    function clearClient(index) {
+      saveUndo();
+      vibrate(50);
+      clients[index].t1 = null;
+      clients[index].t2 = null;
+      clients[index].t3 = null;
+      clients[index].t4 = null;
+      render();
+      saveToStorage();
+    }
+
+    function clearAll() {
+      if (!confirm('¿Limpiar todo?')) return;
+      saveUndo();
+      clients.forEach(c => { c.t1 = null; c.t2 = null; c.t3 = null; c.t4 = null; });
+      render();
+      saveToStorage();
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1500);
+    }
+
+    function getClientTimeSummary(clientsData) {
+      const summary = [];
+      clientsData.forEach(c => {
+        const total = calcDuration(c.t1, c.t4);
+        if (total !== null) summary.push({ id: c.id, formatted: formatDuration(total), isMyTime: c.id === 'Yo' || c.id === 'Mi Tiempo' });
+      });
+      return summary;
+    }
+
+    function saveStore() {
+      const loc = document.getElementById('location').value.trim();
+      if (!loc) { alert('Escribe el nombre de la tienda'); return; }
+      const valid = clients.filter(c => c.t1 && c.t4);
+      if (valid.length === 0) { alert('No hay clientes completos'); return; }
+
+      vibrate(100);
+      const totals = valid.map(c => calcDuration(c.t1, c.t4));
+      const avg = totals.reduce((a, b) => a + b, 0) / valid.length;
+
+      history.unshift({
+        id: Date.now(), name: loc, date: new Date().toISOString(),
+        clientCount: valid.length, avgFormatted: formatDuration(Math.round(avg)), avgDecimal: toDecimal(avg),
+        timeSummary: getClientTimeSummary(clients), clients: clients.map(c => ({...c}))
+      });
+
+      saveToStorage();
+      showToast(`${loc} ✓`);
+      document.getElementById('location').value = '';
+      undoStack = [];
+      clients.forEach(c => { c.t1 = null; c.t2 = null; c.t3 = null; c.t4 = null; });
+      render();
+      renderHistory();
+    }
+
+    function viewStore(id) {
+      const store = history.find(h => h.id === id);
+      if (!store) return;
+
+      document.getElementById('modalTitle').textContent = store.name;
+      document.getElementById('modalDate').textContent = new Date(store.date).toLocaleString('es-ES');
+      document.getElementById('modalClients').textContent = store.clientCount;
+      document.getElementById('modalAvg').textContent = store.avgFormatted;
+      document.getElementById('modalDec').textContent = store.avgDecimal;
+
+      const timesGrid = document.getElementById('modalTimesGrid');
+      timesGrid.innerHTML = '';
+      (store.timeSummary || getClientTimeSummary(store.clients)).forEach(t => {
+        const box = document.createElement('div');
+        box.className = `modal-time-box ${t.isMyTime ? 'my-time' : ''}`;
+        box.innerHTML = `<div class="label">${t.id}</div><div class="value">${t.formatted}</div>`;
+        timesGrid.appendChild(box);
+      });
+
+      const tbody = document.getElementById('modalTableBody');
+      tbody.innerHTML = '';
+      store.clients.forEach(c => {
+        if (!c.t1) return;
+        const row = document.createElement('tr');
+        if (c.id === 'Yo' || c.id === 'Mi Tiempo') row.style.background = 'rgba(52, 211, 153, 0.1)';
+        row.innerHTML = `
+          <td style="text-align:left;font-weight:600;${(c.id === 'Yo' || c.id === 'Mi Tiempo') ? 'color:#34d399;' : ''}">${c.id}</td>
+          <td>${formatTime(c.t1)}</td><td>${formatTime(c.t2)}</td><td>${formatTime(c.t3)}</td><td>${formatTime(c.t4)}</td>
+          <td class="queue-col">${formatDuration(calcDuration(c.t1, c.t2))}</td>
+          <td class="pos-col">${formatDuration(calcDuration(c.t2, c.t3))}</td>
+          <td class="product-col">${formatDuration(calcDuration(c.t3, c.t4))}</td>
+          <td class="total-col">${formatDuration(calcDuration(c.t1, c.t4))}</td>`;
+        tbody.appendChild(row);
+      });
+      document.getElementById('modal').classList.add('visible');
+    }
+
+    function closeModal() { document.getElementById('modal').classList.remove('visible'); }
+    function deleteHistory(e, id) { e.stopPropagation(); history = history.filter(h => h.id !== id); saveToStorage(); renderHistory(); }
+    function clearHistory() { if (confirm('¿Borrar historial?')) { history = []; saveToStorage(); renderHistory(); } }
+
+    function exportAll() {
+      if (history.length === 0) { alert('Sin datos'); return; }
+      let csv = 'TIENDAS\nTienda,Fecha,Clientes,Promedio,Decimal\n';
+      history.forEach(h => csv += `${h.name},${new Date(h.date).toLocaleDateString('es-ES')},${h.clientCount},${h.avgFormatted},${h.avgDecimal}\n`);
+      csv += '\n\nDETALLE\n';
+      history.forEach(h => {
+        csv += `\n${h.name} (${new Date(h.date).toLocaleString('es-ES')})\n`;
+        csv += 'Cliente,T1,T2,T3,T4,Queue,POS,Prod,Total\n';
+        h.clients.forEach(c => {
+          if (!c.t1) return;
+          csv += `${c.id},${formatTime(c.t1)},${formatTime(c.t2)},${formatTime(c.t3)},${formatTime(c.t4)},${formatDuration(calcDuration(c.t1, c.t2))},${formatDuration(calcDuration(c.t2, c.t3))},${formatDuration(calcDuration(c.t3, c.t4))},${formatDuration(calcDuration(c.t1, c.t4))}\n`;
+        });
+      });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = `SOS_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    }
+
+    function render() {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      clients.forEach((c, i) => {
+        const status = getStatus(c);
+        const row = document.createElement('tr');
+        row.className = (i === 0 ? 'my-row ' : '') + (status ? 'status-' + status : '');
+        row.innerHTML = `
+          <td class="client-name">${c.id}</td>
+          <td><button class="time-btn ${c.t1 ? 't1' : 'empty'}" onclick="markTime(${i},'t1')">${c.t1 ? formatTime(c.t1) : 'T1'}</button></td>
+          <td><button class="time-btn ${c.t2 ? 't2' : 'empty'}" onclick="markTime(${i},'t2')">${c.t2 ? formatTime(c.t2) : 'T2'}</button></td>
+          <td><button class="time-btn ${c.t3 ? 't3' : 'empty'}" onclick="markTime(${i},'t3')">${c.t3 ? formatTime(c.t3) : 'T3'}</button></td>
+          <td><button class="time-btn ${c.t4 ? 't4' : 'empty'}" onclick="markTime(${i},'t4')">${c.t4 ? formatTime(c.t4) : 'T4'}</button></td>
+          <td class="duration queue-col"><button class="duration-btn" onclick="openPopup(${i},'queue')">${formatDuration(calcDuration(c.t1, c.t2))}</button></td>
+          <td class="duration pos-col"><button class="duration-btn" onclick="openPopup(${i},'pos')">${formatDuration(calcDuration(c.t2, c.t3))}</button></td>
+          <td class="duration product-col"><button class="duration-btn" onclick="openPopup(${i},'prod')">${formatDuration(calcDuration(c.t3, c.t4))}</button></td>
+          <td class="duration total-col">${formatDuration(calcDuration(c.t1, c.t4))}</td>
+          <td><button class="clear-btn" onclick="clearClient(${i})">✕</button></td>`;
+        tbody.appendChild(row);
+      });
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const valid = clients.filter(c => c.t1 && c.t4);
+      const summary = document.getElementById('summary');
+      if (valid.length === 0) { summary.classList.remove('visible'); return; }
+      const avg = valid.map(c => calcDuration(c.t1, c.t4)).reduce((a, b) => a + b, 0) / valid.length;
+      document.getElementById('statCount').textContent = valid.length;
+      document.getElementById('statAvgTime').textContent = formatDuration(Math.round(avg));
+      document.getElementById('statAvgDec').textContent = toDecimal(avg);
+      summary.classList.add('visible');
+    }
+
+    function renderHistory() {
+      const section = document.getElementById('historySection');
+      const list = document.getElementById('historyList');
+      if (history.length === 0) { section.classList.remove('visible'); return; }
+      section.classList.add('visible');
+      list.innerHTML = '';
+      history.forEach(h => {
+        const timeSummary = h.timeSummary || getClientTimeSummary(h.clients);
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.onclick = () => viewStore(h.id);
+        item.innerHTML = `
+          <div class="history-header"><span class="history-name">${h.name}</span><div><span class="history-date">${new Date(h.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span><button class="delete-history" onclick="deleteHistory(event,${h.id})">✕</button></div></div>
+          <div class="history-stats"><span>N: <strong>${h.clientCount}</strong></span><span>Prom: <strong>${h.avgFormatted}</strong></span></div>
+          <div class="history-times">${timeSummary.map(t => `<div class="history-time-item ${t.isMyTime ? 'my-time' : ''}"><span class="time-label">${t.id}:</span><span class="time-value">${t.formatted}</span></div>`).join('')}</div>`;
+        list.appendChild(item);
+      });
+    }
+
+    function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleTimeString('es-ES'); }
+
+    document.getElementById('modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+    document.getElementById('location').addEventListener('input', saveToStorage);
+
+    loadFromStorage();
+    setInterval(updateClock, 1000);
+    setInterval(saveToStorage, 10000);
+    updateClock();
+    render();
+    renderHistory();
+  </script>
+</body>
+</html>
